@@ -1,40 +1,15 @@
-// handlers/item.go
-
 package handlers
 
 import (
 	"inventory/api/models"
 	"inventory/database"
 	"inventory/pkg"
-	"io"
 	"net/http"
 	"strconv"
-
-	"fmt"
-	"mime/multipart"
-	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 )
-
-const (
-	host      = "localhost"
-	port      = 55000
-	user      = "postgres"
-	password  = "postgrespw"
-	dbname    = "postgres"
-	uploadDir = "./uploads"
-)
-
-type Item struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Price    int    `json:"price"`
-	Filename string `json:"filename"`
-}
 
 func GetItems(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDBConnection()
@@ -89,7 +64,7 @@ func AddItem(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	filename, err := uploadFile(file, handler)
+	filename, err := pkg.UploadFile(file, handler)
 	if err != nil {
 		pkg.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -127,7 +102,7 @@ func UpdateItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = models.UpdateItem(db, id, name, price, r, uploadFile, deleteFile)
+	err = models.UpdateItem(db, id, name, price, r, w, pkg.UploadFile, pkg.DeleteFile)
 	if err != nil {
 		if err == models.ErrItemNotFound {
 			pkg.RespondWithError(w, http.StatusNotFound, "Item not found")
@@ -161,40 +136,11 @@ func DelItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = deleteFile(filename)
+	err = pkg.DeleteFile(filename)
 	if err != nil {
 		pkg.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	pkg.RespondWithJSON(w, http.StatusOK, map[string]string{"message": "Item deleted successfully"})
-}
-
-func uploadFile(file multipart.File, handler *multipart.FileHeader) (string, error) {
-	filename := fmt.Sprintf("%d%s", time.Now().UnixNano()/int64(time.Millisecond), filepath.Ext(handler.Filename))
-
-	// Save the file to the uploads directory with the generated filename
-	filePath := filepath.Join(uploadDir, filename)
-	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0666)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	// Copy the uploaded file's content to the server's file
-	_, err = io.Copy(f, file)
-	if err != nil {
-		return "", err
-	}
-
-	return filename, nil
-}
-
-func deleteFile(filename string) error {
-	filePath := filepath.Join(uploadDir, filename)
-	err := os.Remove(filePath)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
 }

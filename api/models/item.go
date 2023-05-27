@@ -72,7 +72,7 @@ func AddItem(db *sql.DB, name string, price int, filename string) error {
 	return nil
 }
 
-func UpdateItem(db *sql.DB, id int, name string, price int, r *http.Request, uploadFile func(file multipart.File, handler *multipart.FileHeader) (string, error), deleteFile func(filename string) error) error {
+func UpdateItem(db *sql.DB, id int, name string, price int, r *http.Request, w http.ResponseWriter, uploadFile func(file multipart.File, handler *multipart.FileHeader) (string, error), deleteFile func(filename string) error) error {
 	// Check if a file was uploaded
 	file, handler, err := r.FormFile("file")
 	if err == nil {
@@ -81,28 +81,26 @@ func UpdateItem(db *sql.DB, id int, name string, price int, r *http.Request, upl
 		// Retrieve the filename associated with the item from the database
 		var filename string
 		err = db.QueryRow("SELECT filename FROM items WHERE id = $1", id).Scan(&filename)
+		if err == sql.ErrNoRows {
+			return ErrItemNotFound
+		}
+
+		// Delete the associated file from the server
+		err = deleteFile(filename)
 		if err != nil {
-			if err == sql.ErrNoRows {
-				return ErrItemNotFound
-			}
+			return err
+		}
 
-			// Delete the associated file from the server
-			err = deleteFile(filename)
-			if err != nil {
-				return err
-			}
+		// Upload the file and get the generated filename
+		filename, err := uploadFile(file, handler)
+		if err != nil {
+			return err
+		}
 
-			// Upload the file and get the generated filename
-			filename, err := uploadFile(file, handler)
-			if err != nil {
-				return err
-			}
-
-			// Update the filename in the database
-			_, err = db.Exec("UPDATE items SET filename=$1 WHERE id=$2", filename, id)
-			if err != nil {
-				return err
-			}
+		// Update the filename in the database
+		_, err = db.Exec("UPDATE items SET filename=$1 WHERE id=$2", filename, id)
+		if err != nil {
+			return err
 		}
 	}
 
