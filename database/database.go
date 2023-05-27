@@ -11,12 +11,11 @@ import (
 )
 
 const (
-	host      = "localhost"
-	port      = 55000
-	user      = "postgres"
-	password  = "postgrespw"
-	dbname    = "postgres"
-	uploadDir = "./uploads"
+	host     = "localhost"
+	port     = 55000
+	user     = "postgres"
+	password = "postgrespw"
+	dbname   = "postgres"
 )
 
 func GetDBConnection() *sql.DB {

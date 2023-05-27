@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"inventory/api/handlers"
+	"inventory/config"
 	"inventory/database"
 
 	"github.com/gorilla/mux"
@@ -29,13 +30,11 @@ func main() {
 	router.HandleFunc("/item/{id}", handlers.DelItem).Methods("DELETE")
 
 	// Buat handler untuk serve file dari folder "uploads"
-	uploadsHandler := http.FileServer(http.Dir(uploadDir))
-	// Tambahkan route untuk handler uploadsHandler
-	router.PathPrefix("/uploads/").Handler(http.StripPrefix("/uploads/", uploadsHandler))
+	config.ServeUploads(router)
 
 	// Buat folder upload jika belum ada
-	if _, err := os.Stat(uploadDir); os.IsNotExist(err) {
-		os.Mkdir(uploadDir, 0755)
+	if _, err := os.Stat(config.UploadDir); os.IsNotExist(err) {
+		os.Mkdir(config.UploadDir, 0755)
 	}
 
 	db := database.GetDBConnection()
