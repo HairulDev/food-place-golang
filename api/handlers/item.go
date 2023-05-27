@@ -3,9 +3,9 @@
 package handlers
 
 import (
-	"encoding/json"
 	"inventory/api/models"
 	"inventory/database"
+	"inventory/pkg"
 	"io"
 	"net/http"
 	"strconv"
@@ -42,11 +42,11 @@ func GetItems(w http.ResponseWriter, r *http.Request) {
 
 	items, err := models.GetItems(db)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, err.Error())
+		pkg.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, items)
+	pkg.RespondWithJSON(w, http.StatusOK, items)
 }
 
 func GetItem(w http.ResponseWriter, r *http.Request) {
@@ -56,21 +56,21 @@ func GetItem(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid item ID")
+		pkg.RespondWithError(w, http.StatusBadRequest, "Invalid item ID")
 		return
 	}
 
 	item, err := models.GetItem(db, id)
 	if err != nil {
 		if err == models.ErrItemNotFound {
-			respondWithError(w, http.StatusNotFound, "Item not found")
+			pkg.RespondWithError(w, http.StatusNotFound, "Item not found")
 		} else {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			pkg.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		}
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, item)
+	pkg.RespondWithJSON(w, http.StatusOK, item)
 }
 
 func AddItem(w http.ResponseWriter, r *http.Request) {
@@ -78,20 +78,20 @@ func AddItem(w http.ResponseWriter, r *http.Request) {
 	priceStr := r.FormValue("price")
 	price, err := strconv.Atoi(priceStr)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid price")
+		pkg.RespondWithError(w, http.StatusBadRequest, "Invalid price")
 		return
 	}
 
 	file, handler, err := r.FormFile("file")
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Failed to read file")
+		pkg.RespondWithError(w, http.StatusBadRequest, "Failed to read file")
 		return
 	}
 	defer file.Close()
 
 	filename, err := uploadFile(file, handler)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, err.Error())
+		pkg.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -100,11 +100,11 @@ func AddItem(w http.ResponseWriter, r *http.Request) {
 
 	err = models.AddItem(db, name, price, filename)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, err.Error())
+		pkg.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Add item successfully"})
+	pkg.RespondWithJSON(w, http.StatusOK, map[string]string{"message": "Add item successfully"})
 }
 
 func UpdateItem(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +114,7 @@ func UpdateItem(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid item ID")
+		pkg.RespondWithError(w, http.StatusBadRequest, "Invalid item ID")
 		return
 	}
 
@@ -123,21 +123,21 @@ func UpdateItem(w http.ResponseWriter, r *http.Request) {
 	priceStr := r.FormValue("price")
 	price, err := strconv.Atoi(priceStr)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid price")
+		pkg.RespondWithError(w, http.StatusBadRequest, "Invalid price")
 		return
 	}
 
-	err = models.UpdateItem(db, id, name, price, r)
+	err = models.UpdateItem(db, id, name, price, r, uploadFile, deleteFile)
 	if err != nil {
 		if err == models.ErrItemNotFound {
-			respondWithError(w, http.StatusNotFound, "Item not found")
+			pkg.RespondWithError(w, http.StatusNotFound, "Item not found")
 		} else {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			pkg.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		}
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]interface{}{"message": "Update item successfully"})
+	pkg.RespondWithJSON(w, http.StatusOK, map[string]interface{}{"message": "Update item successfully"})
 }
 
 func DelItem(w http.ResponseWriter, r *http.Request) {
@@ -147,21 +147,27 @@ func DelItem(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid item ID")
+		pkg.RespondWithError(w, http.StatusBadRequest, "Invalid item ID")
 		return
 	}
 
-	err = models.DelItem(db, id)
+	filename, err := models.DelItem(db, id)
 	if err != nil {
 		if err == models.ErrItemNotFound {
-			respondWithError(w, http.StatusNotFound, "Item not found")
+			pkg.RespondWithError(w, http.StatusNotFound, "Item not found")
 		} else {
-			respondWithError(w, http.StatusInternalServerError, err.Error())
+			pkg.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		}
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Item deleted successfully"})
+	err = deleteFile(filename)
+	if err != nil {
+		pkg.RespondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	pkg.RespondWithJSON(w, http.StatusOK, map[string]string{"message": "Item deleted successfully"})
 }
 
 func uploadFile(file multipart.File, handler *multipart.FileHeader) (string, error) {
@@ -191,20 +197,4 @@ func deleteFile(filename string) error {
 		return err
 	}
 	return nil
-}
-
-func respondWithError(w http.ResponseWriter, statusCode int, message string) {
-	respondWithJSON(w, statusCode, map[string]string{"error": message})
-}
-
-func respondWithJSON(w http.ResponseWriter, statusCode int, payload interface{}) {
-	response, err := json.Marshal(payload)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	w.Write(response)
 }
